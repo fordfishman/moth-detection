@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.cluster.hierarchy import dendrogram, linkage
 
 def show_rgb_image(image, title=None, conversion=cv2.COLOR_BGR2RGB):
     # https://gist.github.com/mstfldmr/45d6e47bb661800b982c39d30215bc88?permalink_comment_id=3380868
@@ -86,11 +88,6 @@ def image_process(img, imshow=False):
     https://stackoverflow.com/questions/22588146/tracking-white-color-using-python-opencv
 
     """
-
-    # gryimg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # at = cv2.adaptiveThreshold(gryimg, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 111, 15); #block size must be odd
-
     #convert to HSV
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
@@ -101,11 +98,7 @@ def image_process(img, imshow=False):
 
     # Threshold the HSV image to get only bright background colors as a mask
     mask = cv2.inRange(hsv, lower_white, upper_white)
-    # cv2_imshow(mask)
-    # cv2_imshow(at)
-
     #invert the mask to get only non-background items
-    # notmask = cv2.bitwise_not(at)
     notmask = cv2.bitwise_not(mask)
 
     # get the largest contour (cropping sheet)
@@ -116,7 +109,6 @@ def image_process(img, imshow=False):
 
     # get bounding box of the largest contour
     x,y,w,h = cv2.boundingRect(big_contour) #straight rectangle
-    print(x,y,w,h)
 
     # crop the image at the bounds
     cropped_img = img[y:y+h, x:x+w]
@@ -126,12 +118,6 @@ def image_process(img, imshow=False):
     res = cv2.bitwise_and(img,img, mask= notmask)
 
     # show outputs and masks
-    # cv2_imshow(img) #original image cast to a placeholder named "img"
-    # cv2_imshow(mask)
-    # cv2_imshow(res)
-    # cv2_imshow(cropped_img) #cropped version of image
-    # cv2_imshow(cropped_notmask) #cropped mask of insects
-    
     if imshow:
         
         show_rgb_image(cropped_img)
@@ -280,3 +266,64 @@ def image_process2(img):
     print(x,y,w,h)
     # cv2_imshow(notmask)
     return notmask
+
+def standardize(x):
+    """
+    Standardizes columns of a Pandas DataFrame
+    """
+
+    return (x - x.mean(axis=0))/x.std(axis=0)
+
+def hierarchical_clustering(df, labels, box_SA=True, cont_SA=True, avg_cont_color=True, hue_band=True, dend_title="", color_threshold=0.8):
+    
+    # columns we don't want to include
+    drop_columns = ['id','B_avg', 'G_avg', 'R_avg', 'B_dom', 'G_dom', 
+                    'R_dom', 'h_63.5', 'h_84.7', 'h_105.9', 'h_127.1', 
+                    'h_148.2', 'h_169.4', 'h_190.6', 'H_diff_180'] 
+    
+    n_size_features = 0
+    
+    if not box_SA:
+        drop_columns += ['box_SA']
+        n_size_features += 1
+    
+    if not cont_SA:
+        drop_columns += ['cont_SA']
+        n_size_features += 1
+    
+    if not avg_cont_color:
+        drop_columns += ['B_cont_mean', 'G_cont_mean', 'R_cont_mean', 
+                         'H_cont_mean','S_cont_mean', 'V_cont_mean']
+    
+    if not hue_band:
+        drop_columns += ['h_0.0', 'h_21.2', 'h_42.4', 'h_211.8', 'h_232.9', 
+                         'h_254.1', 'h_275.3', 'h_296.5', 'h_317.6', 'h_338.8']
+        
+    data = df.drop(columns=drop_columns)
+    
+    data_std = standardize(data)
+    
+    n_color_features = len(data.columns) - n_size_features
+    
+    size_w = [ 1/n_size_features for _ in range(n_size_features) ]
+    color_w = [ 1/n_color_features for _ in range(n_color_features) ]
+    
+    w = np.array(size_w + color_w)
+    data_w = data_std*w
+    
+    clusters = linkage(data_w, method='ward', metric='euclidean')
+    
+    plt.figure(figsize=(13, 12))
+    dendrogram(
+        clusters,
+        orientation='right',
+        labels=labels,
+        distance_sort='descending',
+        show_leaf_counts=False,
+        leaf_font_size=10,
+        color_threshold = color_threshold
+    )
+    plt.title(dend_title)
+    plt.show()
+    
+    return None
