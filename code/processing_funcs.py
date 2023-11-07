@@ -1,3 +1,4 @@
+import os
 import cv2 
 import numpy as np
 import pandas as pd
@@ -125,7 +126,7 @@ def image_process(img, imshow=False):
     
     return cropped_img, cropped_notmask
 
-def image_data(cropped_img, cropped_notmask, image_id):
+def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
     #blur to remove noise
     blur = cv2.blur(cropped_notmask, (10,10))
 
@@ -138,10 +139,11 @@ def image_data(cropped_img, cropped_notmask, image_id):
     contours, hierarchy = cv2.findContours(thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
     try: hierarchy = hierarchy[0]
     except: hierarchy = []
-    print("num total contours:", len(contours)) #print out how many total contours were found
+    
+    if verbose: print("num total contours:", len(contours)) #print out how many total contours were found
 
     height, width = thresh.shape
-    print("height, width:", height, width)
+    if verbose: print("height, width:", height, width)
     min_x, min_y = width, height
     max_x = max_y = 0
 
@@ -183,7 +185,7 @@ def image_data(cropped_img, cropped_notmask, image_id):
         if area > 1000:
             # test if contour touches sides of image
             if x == 0 or y == 0 or x+w == width or y+h == height:
-                print(sub_id,': region touches the sides')
+                if verbose: print(sub_id,': region touches the sides')
                 i=i+1
             else:
                 cv2.rectangle(thresh, (x,y), (x+w,y+h), (255, 0, 0), 2) #draw a rectangle on thresh
@@ -206,9 +208,11 @@ def image_data(cropped_img, cropped_notmask, image_id):
                 _, labels, palette = cv2.kmeans(pixels, n_colors, None, criteria, 10, flags)
                 _, counts = np.unique(labels, return_counts=True)
                 dominant = palette[np.argmax(counts)]
-                print(sub_id,": box_SA:",surface,"cont_SA:",area,"avg:",average,"dom:",dominant,"cont_mean:",cont_mean)
-                print("HSV_cont_mean: ",H_cont_mean,S_cont_mean,V_cont_mean)
-                print("H diff from 180:", abs(H_cont_mean-180))
+                
+                if verbose:
+                    print(sub_id,": box_SA:",surface,"cont_SA:",area,"avg:",average,"dom:",dominant,"cont_mean:",cont_mean)
+                    print("HSV_cont_mean: ",H_cont_mean,S_cont_mean,V_cont_mean)
+                    print("H diff from 180:", abs(H_cont_mean-180))
 
                 # save the data
                 image_data_dict['id'].append(sub_id)
@@ -232,10 +236,13 @@ def image_data(cropped_img, cropped_notmask, image_id):
 
                 # Using cv2.copyMakeBorder() method
                 bordertemp = cv2.copyMakeBorder(moth_thumbnail, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value = cont_mean) #make a thumbnail with a 10px border of the avg contour color
-                show_rgb_image(bordertemp)
+                if verbose: show_rgb_image(bordertemp)
+                
+                # save sub image
+                cv2.imwrite(f'{sub_id}.jpg',moth_thumbnail)
                 i=i+1
         else:
-            print(sub_id,': region is too small')
+            if verbose: print(sub_id,': region is too small')
             i=i+1
 
     if max_x - min_x > 0 and max_y - min_y > 0:
@@ -327,3 +334,39 @@ def hierarchical_clustering(df, labels, box_SA=True, cont_SA=True, avg_cont_colo
     plt.show()
     
     return None
+
+def image_paths(path='../data/NightlyImagesforData2023', folder_names=None):
+    
+    # check to see folder names are in proper form
+    assert folder_names is None or isinstance(folder_names, list), 'Please provide folder names as a list of strings.'
+    
+    os.chdir(path) # change directory
+    
+    image_paths = []
+    
+    image_ids = []
+
+    for night_folder in os.listdir():
+        
+        if folder_names is not None: # if folder names have been provided
+            
+            if not night_folder in folder_names: # ignore folders not named
+                
+                continue
+        
+        # macs have .DS_Store files we need to ignore
+        if not night_folder.startswith('.'):
+        
+            folder_path = f'{os.getcwd()}/{night_folder}' # path to folder containing images
+            
+            image_files = os.listdir(folder_path) # return list of images in folder
+            
+            for image_name in image_files: # go through all images
+                
+                if image_name.lower().endswith('.jpg') or image_name.lower().endswith('.jpeg'): # select the .jpg
+                    
+                    image_paths.append(f'{folder_path}/{image_name}') # add the path to the .jpg to the list
+                    
+                    image_ids.append(night_folder) # save the names of folders as IDs
+    
+    return image_paths, image_ids
