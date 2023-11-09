@@ -252,27 +252,8 @@ def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
     df = pd.DataFrame(image_data_dict)
     hues = pd.DataFrame(hue_proportions, columns=["h_{:.1f}".format(n) for n in np.linspace(0, 360, num=18) if n != 360 ] )
     df_hues = df.join(hues)
+    df_hues['notes'] = '' # add a blank notes column
     return df_hues
-
-def image_process2(img):
-    """
-    IN PROGRESS, NOT PROPERLY FUNCTIONAL
-    """
-
-    gryimg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    th2 = cv2.adaptiveThreshold(gryimg, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 111, 15); #block size must be odd
-
-    notmask = cv2.bitwise_not(th2)
-    # get the largest contour (cropping sheet)
-    contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = contours[0] if len(contours) == 2 else contours[1]
-    big_contour = max(contours, key=cv2.contourArea)
-
-    # get bounding box of the largest contour
-    x,y,w,h = cv2.boundingRect(big_contour) #straight rectangle
-    print(x,y,w,h)
-    # cv2_imshow(notmask)
-    return notmask
 
 def standardize(x):
     """
@@ -281,12 +262,16 @@ def standardize(x):
 
     return (x - x.mean(axis=0))/x.std(axis=0)
 
-def hierarchical_clustering(df, labels, box_SA=True, cont_SA=True, avg_cont_color=True, hue_band=True, dend_title="", color_threshold=0.8):
+def hierarchical_clustering(df, labels=None, box_SA=True, cont_SA=True, avg_cont_color=True, hue_band=True, dend_title="", color_threshold=0.8):
+    
+    if labels is None:
+        
+        labels = list(df.notes + ' ' + df.id)
     
     # columns we don't want to include
     drop_columns = ['id','B_avg', 'G_avg', 'R_avg', 'B_dom', 'G_dom', 
                     'R_dom', 'h_63.5', 'h_84.7', 'h_105.9', 'h_127.1', 
-                    'h_148.2', 'h_169.4', 'h_190.6', 'H_diff_180'] 
+                    'h_148.2', 'h_169.4', 'h_190.6', 'H_diff_180', 'notes'] 
     
     n_size_features = 0
     
@@ -317,7 +302,6 @@ def hierarchical_clustering(df, labels, box_SA=True, cont_SA=True, avg_cont_colo
     
     w = np.array(size_w + color_w)
     data_w = data_std*w
-    
     clusters = linkage(data_w, method='ward', metric='euclidean')
     
     plt.figure(figsize=(13, 12))
