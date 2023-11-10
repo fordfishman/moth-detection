@@ -106,7 +106,7 @@ def image_process(img, imshow=False):
     th2 = cv2.adaptiveThreshold(gryimg, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 111, 15) #block size must be odd
     cropped_notmask = cv2.bitwise_not(th2)
     
-    if imshow:
+    if imshow: # show images if imshow = True
         show_rgb_image(cropped_img)
         show_rgb_image(cropped_notmask)
     return cropped_img, cropped_notmask
@@ -136,6 +136,8 @@ def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
     # computes the bounding box for the contour, and draws it on the frame,
     i=0
 
+    # creates a dictionary object to hold data before we convert
+    # to a data frame
     image_data_dict = {
                 'id' : [],
                 'box_SA' : [],
@@ -155,6 +157,8 @@ def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
                 'H_diff_180' : []
     }
 
+    # the hue information will be temporarily stored in 
+    # a list
     hue_proportions = list()
 
 
@@ -217,11 +221,13 @@ def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
                 image_data_dict['S_cont_mean'].append(S_cont_mean)
                 image_data_dict['V_cont_mean'].append(V_cont_mean)
                 image_data_dict['H_diff_180'].append(abs(H_cont_mean-180))
-
+                # calculate hue banding data -> see h_proportions() above
+                # save data to list created above
                 hue_proportions.append(h_proportions(pixels))
 
                 # Using cv2.copyMakeBorder() method
                 bordertemp = cv2.copyMakeBorder(moth_thumbnail, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value = cont_mean) #make a thumbnail with a 10px border of the avg contour color
+                # show images if verboes = True
                 if verbose: show_rgb_image(bordertemp)
                 
                 # save sub image
@@ -235,88 +241,127 @@ def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
         cv2.rectangle(thresh, (min_x, min_y), (max_x, max_y), (255, 0, 0), 2)
 
     # cv2_imshow(thresh)
+    # save data to a data frame
     df = pd.DataFrame(image_data_dict)
+    # create second data frame for hue banding data
     hues = pd.DataFrame(hue_proportions, columns=["h_{:.1f}".format(n) for n in np.linspace(0, 360, num=18) if n != 360 ] )
+    # combine data frames
     df_hues = df.join(hues)
     df_hues['notes'] = '' # add a blank notes column
     return df_hues
 
 def standardize(x):
     """
-    Standardizes columns of a Pandas DataFrame
+    Standardizes columns of a Pandas DataFrame.
+    Takes column mean, subtract every value in the
+    column by the mean, and then divide by the standard
+    deviation of the column. Values are now in the same 
+    relative units. 
     """
 
     return (x - x.mean(axis=0))/x.std(axis=0)
 
 def hierarchical_clustering(df, labels=None, box_SA=True, cont_SA=True, avg_cont_color=True, hue_band=True, dend_title="", color_threshold=0.8):
     
+    # if no explicit labels are provided
     if labels is None:
-        
+        # make the labels whatever is in the notes plus the sub image id
         labels = list(df.notes + ' ' + df.id)
     
-    # columns we don't want to include
+    # columns we don't want to include for standardizing
     drop_columns = ['id','B_avg', 'G_avg', 'R_avg', 'B_dom', 'G_dom', 
                     'R_dom', 'h_63.5', 'h_84.7', 'h_105.9', 'h_127.1', 
                     'h_148.2', 'h_169.4', 'h_190.6', 'H_diff_180', 'notes'] 
     
-    n_size_features = 0
+    # if no size variables are removed, there are two of them:
+    # the surface area of the box, and the surface area of the contour
+    n_size_features = 2
     
-    if not box_SA:
-        drop_columns += ['box_SA']
-        n_size_features += 1
+    if not box_SA: # if not including box surface area
+        drop_columns += ['box_SA'] # remove column
+        n_size_features -= 1 # 1 fewer size feature
     
-    if not cont_SA:
-        drop_columns += ['cont_SA']
-        n_size_features += 1
+    if not cont_SA: # if not including contour surface area
+        drop_columns += ['cont_SA'] # remove column
+        n_size_features -= 1 # 1 fewer size features
     
-    if not avg_cont_color:
+    if not avg_cont_color: # if not including average color data
+        # remove that info from the data frame
         drop_columns += ['B_cont_mean', 'G_cont_mean', 'R_cont_mean', 
                          'H_cont_mean','S_cont_mean', 'V_cont_mean']
     
-    if not hue_band:
+    if not hue_band: # if not including the hue banding data
+        # remove that info from the data frame
         drop_columns += ['h_0.0', 'h_21.2', 'h_42.4', 'h_211.8', 'h_232.9', 
                          'h_254.1', 'h_275.3', 'h_296.5', 'h_317.6', 'h_338.8']
-        
+    
+    # drop all specified columns from the data frame
     data = df.drop(columns=drop_columns)
     
+    # standardize data for better performance in hierarchical clustering
     data_std = standardize(data)
     
+    # num of color features = total num features - num size features
     n_color_features = len(data.columns) - n_size_features
     
+    # create weights for hierarchical clustering
+    # size and color in total are weighted equally
+    # all size features are weighted equally to each other, 
+    # as are all color features
     size_w = [ 1/n_size_features for _ in range(n_size_features) ]
     color_w = [ 1/n_color_features for _ in range(n_color_features) ]
     
+    # combine size and color weights into one array
     w = np.array(size_w + color_w)
+    
+    # multiply the standardized data by the weights
+    # each column is multiplied by the appropriate weight
     data_w = data_std*w
+    
+    # linkage runs hierarchical clustering 
+    # we calculate euclidean distance between all samples
+    # nearest samples combine into a cluster
+    # use ward's method to see which clusters should combine
     clusters = linkage(data_w, method='ward', metric='euclidean')
     
-    plt.figure(figsize=(13, 12))
-    dendrogram(
-        clusters,
-        orientation='right',
-        labels=labels,
-        distance_sort='descending',
+    # plot the clustering as a dendrogram
+    plt.figure(figsize=(13, 12)) # create fig and specify size
+    dendrogram( # add dendrogram to figure
+        clusters, # use the clusters from the linkage function
+        orientation='right', # what direction the plot faces
+        labels=labels, # adds labels
+        distance_sort='descending',# largest distances first
         show_leaf_counts=False,
-        leaf_font_size=10,
-        color_threshold = color_threshold
+        leaf_font_size=10, # size of labels
+        color_threshold = color_threshold # arbitrary distance for grouping based on color
     )
-    plt.title(dend_title)
-    plt.show()
+    plt.title(dend_title) # display custom title
+    plt.show() # show figure
     
     return None
 
 def image_paths(path='../data/NightlyImagesforData2023', folder_names=None):
-    
+    """
+    Generates paths to .jpgs (or .jpegs) in image folders
+    Args:
+        path (str, optional): Path to directory containing image folders. Defaults to '../data/NightlyImagesforData2023'.
+        folder_names (list, optional): List of specific image folders of interest. 
+            Defaults to None, which will cause function to use all image folders available.
+
+    Returns:
+        image_paths (list): paths to each .jpg file in specified image folders
+        image_ids (list): names of each folder as strings
+    """
     # check to see folder names are in proper form
     assert folder_names is None or isinstance(folder_names, list), 'Please provide folder names as a list of strings.'
     
     os.chdir(path) # change directory
     
+    # initialize lists that will store image paths and ids
     image_paths = []
-    
     image_ids = []
 
-    for night_folder in os.listdir():
+    for night_folder in os.listdir(): # loop over all image folders and call each night_folder
         
         if folder_names is not None: # if folder names have been provided
             
