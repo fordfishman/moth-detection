@@ -83,48 +83,34 @@ def h_proportions(pixels):
 
     return np.array(proportions) # return proportions in an array
 
+
 def image_process(img, imshow=False):
-
-    """
-    https://stackoverflow.com/questions/22588146/tracking-white-color-using-python-opencv
-
-    """
     #convert to HSV
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
     # define range of background (white) brightness in HSV
     sensitivity = 105
     lower_white = np.array([0,0,255-sensitivity])
     upper_white = np.array([255,255,255])
-
     # Threshold the HSV image to get only bright background colors as a mask
     mask = cv2.inRange(hsv, lower_white, upper_white)
-    #invert the mask to get only non-background items
-    notmask = cv2.bitwise_not(mask)
-
     # get the largest contour (cropping sheet)
     contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    # contours = cv2.findContours(at, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = contours[0] if len(contours) == 2 else contours[1]
     big_contour = max(contours, key=cv2.contourArea)
-
     # get bounding box of the largest contour
     x,y,w,h = cv2.boundingRect(big_contour) #straight rectangle
-
     # crop the image at the bounds
     cropped_img = img[y:y+h, x:x+w]
-    cropped_notmask = notmask[y:y+h, x:x+w]
-
-    # Bitwise-AND mask and original image
-    res = cv2.bitwise_and(img,img, mask= notmask)
-
-    # show outputs and masks
+    
+    gryimg = cv2.cvtColor(cropped_img, cv2.COLOR_BGR2GRAY)
+    th2 = cv2.adaptiveThreshold(gryimg, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 111, 15) #block size must be odd
+    cropped_notmask = cv2.bitwise_not(th2)
+    
     if imshow:
-        
         show_rgb_image(cropped_img)
         show_rgb_image(cropped_notmask)
-    
     return cropped_img, cropped_notmask
+    
 
 def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
     #blur to remove noise
