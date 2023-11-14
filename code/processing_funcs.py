@@ -132,7 +132,6 @@ def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
     min_x, min_y = width, height
     max_x = max_y = 0
 
-    # computes the bounding box for the contour, and draws it on the frame,
     i=0
 
     # creates a dictionary object to hold data before we convert
@@ -180,7 +179,6 @@ def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
                 cv2.rectangle(thresh, (x,y), (x+w,y+h), (255, 0, 0), 2) #draw a rectangle on thresh
                 moth_thumbnail = cropped_img[y:y+h, x:x+w]
                 surface = h*w #surface area of bounding box
-                area = cv2.contourArea(contour) #surface area of contour
 
                 average = moth_thumbnail.mean(axis=0).mean(axis=0) #average color of thumbnail (bounding box) [B,G,R]
                 #get mean color by contour
@@ -235,11 +233,7 @@ def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
         else:
             if verbose: print(sub_id,': region is too small')
             i=i+1
-
-    if max_x - min_x > 0 and max_y - min_y > 0:
-        cv2.rectangle(thresh, (min_x, min_y), (max_x, max_y), (255, 0, 0), 2)
-
-    # cv2_imshow(thresh)
+            
     # save data to a data frame
     df = pd.DataFrame(image_data_dict)
     # create second data frame for hue banding data
