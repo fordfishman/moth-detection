@@ -119,7 +119,6 @@ def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
     #Apply thresholding to resharpen
     threshValue = 127
     ret, thresh = cv2.threshold(blur, threshValue, 255, cv2.THRESH_BINARY)
-    # cv2_imshow(thresh)
 
     # Find the big contours/blobs on "thresh" (the filtered image):
     contours, hierarchy = cv2.findContours(thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
@@ -261,7 +260,10 @@ def standardize(x):
 
     return (x - x.mean(axis=0))/x.std(axis=0)
 
-def hierarchical_clustering(df, labels=None, box_SA=True, cont_SA=True, avg_cont_color=True, hue_band=True, dend_title="", color_threshold=0.8):
+def hierarchical_clustering(df, labels=None, box_SA=True, cont_SA=True, avg_cont_color=True, 
+                            hue_band=True, dend_title="", color_threshold=0.8, 
+                            fig_width=13, fig_height=12, 
+                            title_fontsize=14, label_fontsize=12, x_font_size=12):
     
     # if no explicit labels are provided
     if labels is None:
@@ -325,17 +327,19 @@ def hierarchical_clustering(df, labels=None, box_SA=True, cont_SA=True, avg_cont
     clusters = linkage(data_w, method='ward', metric='euclidean')
     
     # plot the clustering as a dendrogram
-    plt.figure(figsize=(13, 12)) # create fig and specify size
+    plt.figure(figsize=(fig_width, fig_height)) # create fig and specify size
     dendrogram( # add dendrogram to figure
         clusters, # use the clusters from the linkage function
         orientation='right', # what direction the plot faces
         labels=labels, # adds labels
         distance_sort='descending',# largest distances first
         show_leaf_counts=False,
-        leaf_font_size=10, # size of labels
+        leaf_font_size=label_fontsize, # size of labels
         color_threshold = color_threshold # arbitrary distance for grouping based on color
     )
-    plt.title(dend_title) # display custom title
+    plt.xlabel("Distance",fontsize=x_font_size)
+    plt.xticks(fontsize=x_font_size)
+    plt.title(dend_title, fontsize=title_fontsize) # display custom title
     plt.show() # show figure
     
     return None
