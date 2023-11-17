@@ -183,6 +183,14 @@ def image_data(cropped_img, cropped_notmask, image_id ,verbose=False):
                 average = moth_thumbnail.mean(axis=0).mean(axis=0) #average color of thumbnail (bounding box) [B,G,R]
                 #get mean color by contour
                 mask = np.zeros(cropped_notmask.shape,np.uint8)
+                
+                contour_pixels = list()
+                
+                # get colors for each pixel in contour
+                for i, j in contour.reshape(-1,2):
+                    contour_pixels.append(cropped_img[j, i])
+                    
+                contour_pixels = np.array(contour_pixels)
                 cv2.drawContours(mask,[contour],0,255,-1)
                 cont_mean = cv2.mean(cropped_img,mask = mask) #get mean color within the mask from the image named "crop" [B,G,R]
                 H_cont_mean,S_cont_mean,V_cont_mean = bgr2hsv(cont_mean[0],cont_mean[1],cont_mean[2])
